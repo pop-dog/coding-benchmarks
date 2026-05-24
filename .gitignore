@@ -1,6 +1,3 @@
-# Never publish hidden evaluation suites
-**/eval_tests/
-
 # Results (may contain sensitive run data)
 results/
 

@@ -1,0 +1,19 @@
+# Never publish hidden evaluation suites
+**/eval_tests/
+
+# Results (may contain sensitive run data)
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.egg-info/
+
+# Env files (agent secrets)
+.env
+*.env.local
+
+# OS
+.DS_Store

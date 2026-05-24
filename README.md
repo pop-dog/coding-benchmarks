@@ -69,3 +69,76 @@ coding-benchmarks/
 ## Running the benchmark
 
 Full harness usage will be documented once the harness module is implemented. See `PRD.md` for the complete design.
+
+---
+
+## Generating New Tasks
+
+`tools/generate_task.py` is a standalone utility that calls the Claude API to
+draft a complete benchmark task directory.  It is not part of the runtime
+harness and is intended for use by task authors.
+
+### Setup
+
+```bash
+pip install -r tools/requirements.txt
+export ANTHROPIC_API_KEY=sk-...
+```
+
+### Usage
+
+```bash
+python tools/generate_task.py \
+  --language python \
+  --difficulty easy \
+  --category "off-by-one bug" \
+  --output benchmark/v1.0/tasks/python/easy/task_002
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--language` | yes | `python`, `go`, or `rust` |
+| `--difficulty` | yes | `easy`, `medium`, or `hard` |
+| `--category` | yes | Bug category (see rubrics below) |
+| `--output` | yes | Path to the new task directory (must not exist) |
+| `--dry-run` | no | Print the LLM prompt and exit without calling the API |
+
+### Difficulty rubrics
+
+| Tier | Files changed | Typical bug types |
+|------|--------------|-------------------|
+| easy | 1 | off-by-one, wrong conditional, missing return |
+| medium | 1–3 | non-obvious boundary condition, partially-implemented feature |
+| hard | 3+ | cross-cutting concern, integration bug, interacting defects |
+
+### Language-appropriate bug categories
+
+| Language | Categories |
+|----------|-----------|
+| python | off-by-one, wrong conditional, missing return, incorrect slice, type error |
+| go | concurrency bug (race condition), wrong error handling, nil pointer, goroutine leak |
+| rust | borrow checker violation, wrong lifetime, off-by-one, incorrect iterator usage |
+
+### Output layout
+
+The script creates the following files under `--output`:
+
+```
+<output>/
+  repo/<module>.py          # source with the seeded bug
+  repo/README.md            # module documentation (no spoilers)
+  prompt.md                 # problem description shown to the agent
+  tests/test_<module>.py    # example tests (fail on buggy repo, visible to agent)
+  eval_tests/test_<module>_eval.py  # thorough eval tests (hidden from agent)
+```
+
+### Human review checklist
+
+After generating a task, verify the following before committing:
+
+- [ ] `pytest <output>/tests/` **fails** against the unmodified repo
+- [ ] `pytest <output>/eval_tests/` **fails** against the unmodified repo
+- [ ] Both test suites **pass** after applying the correct fix
+- [ ] The problem is solvable within the tiered timeout for its difficulty
+- [ ] The difficulty rubric is met (number of files changed, bug complexity)
+- [ ] `prompt.md` clearly describes the observed failure symptom without revealing the fix or the affected line

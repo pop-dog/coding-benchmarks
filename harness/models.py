@@ -2,7 +2,27 @@
 models.py — Data classes for harness results.
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class TaskMetrics:
+    """Timing and token metrics collected during a single task run."""
+
+    agent_completion_time_s: float
+    """Wall-clock seconds from container start to agent exit."""
+
+    eval_runtime_s: float
+    """Wall-clock seconds to run eval_tests (proxy for solution efficiency)."""
+
+    steps: Optional[int]
+    """Number of agent steps parsed from agent stdout JSON; None if absent/malformed."""
+
+    tokens: Optional[int]
+    """Number of tokens parsed from agent stdout JSON; None if absent/malformed."""
 
 
 @dataclass
@@ -32,3 +52,13 @@ class TaskResult:
 
     agent_stderr: str
     """Captured stderr from run.sh."""
+
+    metrics: TaskMetrics = field(
+        default_factory=lambda: TaskMetrics(
+            agent_completion_time_s=0.0,
+            eval_runtime_s=0.0,
+            steps=None,
+            tokens=None,
+        )
+    )
+    """Timing and token metrics for this task run."""

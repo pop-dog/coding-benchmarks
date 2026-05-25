@@ -36,6 +36,7 @@ reachable from the container.
 """
 
 import io
+import json
 import os
 import tarfile
 import time
@@ -45,7 +46,7 @@ from typing import Optional
 import docker
 import docker.errors
 
-from .models import TaskResult
+from .models import TaskMetrics, TaskResult
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -260,7 +261,9 @@ def run_task(
             "--difficulty", difficulty,
         ]
 
+        agent_start = time.monotonic()
         exit_code, stdout, stderr = _exec_run(container, agent_cmd, timeout_s)
+        agent_completion_time_s = time.monotonic() - agent_start
 
         result.agent_stdout = stdout
         result.agent_stderr = stderr
@@ -268,25 +271,58 @@ def run_task(
         if exit_code == 124:
             result.timed_out = True
             result.exit_code = 124
+            result.metrics = TaskMetrics(
+                agent_completion_time_s=agent_completion_time_s,
+                eval_runtime_s=0.0,
+                steps=None,
+                tokens=None,
+            )
             # Container has already been killed; skip eval.
             return result
 
         result.exit_code = exit_code
 
         # ------------------------------------------------------------------
+        # Parse agent stdout for steps/tokens
+        # ------------------------------------------------------------------
+        steps: Optional[int] = None
+        tokens: Optional[int] = None
+        try:
+            parsed = json.loads(stdout)
+            if isinstance(parsed, dict):
+                raw_steps = parsed.get("steps")
+                if isinstance(raw_steps, int):
+                    steps = raw_steps
+                raw_tokens = parsed.get("tokens")
+                if isinstance(raw_tokens, int):
+                    tokens = raw_tokens
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # ------------------------------------------------------------------
         # Copy eval_tests/ into /sandbox/eval_tests/ and run pytest
         # ------------------------------------------------------------------
         eval_tests_src = task_dir / "eval_tests"
+        eval_runtime_s = 0.0
         if eval_tests_src.exists():
             _put_path(container, eval_tests_src, SANDBOX_DIR)
+            eval_start = time.monotonic()
             eval_result = container.exec_run(
                 ["python3", "-m", "pytest", "/sandbox/eval_tests/", "-q", "--tb=short"],
                 workdir=SANDBOX_DIR,
             )
+            eval_runtime_s = time.monotonic() - eval_start
             result.passed = (eval_result.exit_code == 0)
         else:
             # No eval tests — treat as passed if agent exited cleanly.
             result.passed = (exit_code == 0)
+
+        result.metrics = TaskMetrics(
+            agent_completion_time_s=agent_completion_time_s,
+            eval_runtime_s=eval_runtime_s,
+            steps=steps,
+            tokens=tokens,
+        )
 
     finally:
         # ------------------------------------------------------------------

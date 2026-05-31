@@ -19,6 +19,31 @@ Each agent lives in its own directory (or repository) with the following require
 
 All three files must be present. The harness will not proceed if any are missing.
 
+An optional fourth file may also be present:
+
+```
+<agent-repo>/
+  mounts.json     # declares extra host→container bind mounts (optional)
+```
+
+### mounts.json
+
+If present, `mounts.json` must be a JSON array of mount objects:
+
+```json
+[
+  {"host": "~/.claude", "container": "/root/.claude", "mode": "ro"}
+]
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `host` | yes | Path on the host machine. `~` is expanded. |
+| `container` | yes | Absolute path inside the container. |
+| `mode` | no | `"ro"` (read-only, default) or `"rw"` (read-write). |
+
+Agents that need no extra mounts simply omit the file.
+
 ---
 
 ## setup.sh

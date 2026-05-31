@@ -68,6 +68,26 @@ AGENT_DIR = "/agent"
 # ---------------------------------------------------------------------------
 
 
+def _parse_mounts(mounts_path: Path) -> dict:
+    """Read an optional ``mounts.json`` and return a Docker volumes dict.
+
+    Each entry must have ``host`` and ``container`` keys, plus an optional
+    ``mode`` key (default ``"ro"``).  ``~`` in ``host`` is expanded.
+    Missing or malformed files are silently ignored.
+    """
+    if not mounts_path.exists():
+        return {}
+    try:
+        entries = json.loads(mounts_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    volumes = {}
+    for entry in entries:
+        host = str(Path(entry["host"]).expanduser().resolve())
+        volumes[host] = {"bind": entry["container"], "mode": entry.get("mode", "ro")}
+    return volumes
+
+
 def _parse_env_template(env_template_path: Path) -> dict:
     """Read an ``.env.template`` file and return vars present in the host env.
 
@@ -204,19 +224,19 @@ def run_task(
     # Launch container
     # ------------------------------------------------------------------
     # The agent directory is bind-mounted read-only at /agent/.
+    # Extra mounts declared in the agent's mounts.json are also applied.
     # No host-network — containers get Docker's default bridge.
+    volumes = {
+        str(agent_dir): {"bind": AGENT_DIR, "mode": "ro"},
+        **_parse_mounts(agent_dir / "mounts.json"),
+    }
     container = client.containers.run(
         IMAGE,
         command="sleep infinity",
         detach=True,
         remove=False,
         environment=env,
-        volumes={
-            str(agent_dir): {
-                "bind": AGENT_DIR,
-                "mode": "ro",
-            }
-        },
+        volumes=volumes,
     )
 
     result = TaskResult(

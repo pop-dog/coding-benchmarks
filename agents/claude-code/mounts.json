@@ -1,0 +1,4 @@
+[
+  {"host": "~/.claude.json", "container": "/root/.claude.json", "mode": "ro"},
+  {"host": "~/.claude", "container": "/root/.claude", "mode": "ro"}
+]
